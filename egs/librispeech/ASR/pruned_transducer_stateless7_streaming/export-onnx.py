@@ -454,8 +454,8 @@ def export_joiner_model_onnx(
     joiner_dim = joiner_model.output_linear.weight.shape[1]
     logging.info(f"joiner dim: {joiner_dim}")
 
-    projected_encoder_out = torch.rand(11, joiner_dim, dtype=torch.float32)
-    projected_decoder_out = torch.rand(11, joiner_dim, dtype=torch.float32)
+    projected_encoder_out = torch.rand(1, joiner_dim, dtype=torch.float32)
+    projected_decoder_out = torch.rand(1, joiner_dim, dtype=torch.float32)
 
     torch.onnx.export(
         joiner_model,
