@@ -1,0 +1,93 @@
+name: Reproduce Sherpa-ONNX Issue 3542
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  reproduce_rknn_error:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+    
+    container:
+      image: ghcr.io/k2-fsa/icefall:cpu-py3.10-torch2.0.0-v20241218
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install RKNN Dependencies
+        run: |
+          pip install -q onnx onnxruntime onnxsim sentencepiece librosa
+          
+          # Install RKNN Toolkit 2
+          curl -SL -O https://huggingface.co/csukuangfj/rknn-toolkit2/resolve/main/rknn_toolkit2-2.1.0%2B708089d1-cp310-cp310-linux_x86_64.whl
+
+          pip install ./*.whl "numpy<=1.26.4"
+          pip list | grep rknn
+          echo "---"
+          pip list
+          echo "---"
+        
+      - name: Download HuggingFace Model
+        run: |
+          export PYTHONPATH=$PWD:$PYTHONPATH
+          cd egs/librispeech/ASR/pruned_transducer_stateless7_streaming
+          
+          git lfs install
+          repo_url=https://huggingface.co/marcoyang/icefall-libri-giga-pruned-transducer-stateless7-streaming-2023-04-04
+          GIT_LFS_SKIP_SMUDGE=1 git clone $repo_url
+          repo=$(basename $repo_url)
+          
+          pushd $repo
+          git lfs pull --include "data/lang_bpe_500/bpe.model"
+          git lfs pull --include "exp/pretrained.pt"
+          cd exp
+          ln -s pretrained.pt epoch-99.pt
+          popd
+
+          # export onnx with dynamic-batch 0
+          
+          python export-onnx.py \
+          --dynamic-batch 0 \
+          --tokens $repo/data/lang_bpe_500/tokens.txt \
+          --use-averaged-model 0 \
+          --epoch 99 \
+          --avg 1 \
+          --exp-dir $repo/exp \
+          --decode-chunk-len 32 \
+          --num-encoder-layers "2,4,3,2,4" \
+          --feedforward-dims "1024,1024,2048,2048,1024" \
+          --nhead "8,8,8,8,8" \
+          --encoder-dims "384,384,384,384,384" \
+          --attention-dims "192,192,192,192,192" \
+          --encoder-unmasked-dims "256,256,256,256,256" \
+          --zipformer-downsampling-factors "1,2,4,8,2" \
+          --cnn-module-kernels "31,31,31,31,31" \
+          --decoder-dim 512 \
+          --joiner-dim 512
+
+      - name: Run RKNN Export
+        run: |
+          export PYTHONPATH=$PWD:$PYTHONPATH
+          cd egs/librispeech/ASR/pruned_transducer_stateless7_streaming
+
+          d=icefall-libri-giga-pruned-transducer-stateless7-streaming-2023-04-04/exp
+          
+          python export_rknn.py \
+          --target-platform rk3588 \
+          --in-encoder $d/encoder-epoch-99-avg-1.onnx \
+          --in-decoder $d/decoder-epoch-99-avg-1.onnx \
+          --in-joiner $d/joiner-epoch-99-avg-1.onnx \
+          --out-encoder $d/encoder.rknn \
+          --out-decoder $d/decoder.rknn \
+          --out-joiner $d/joiner.rknn
+
+      - name: Upload RKNN and ONNX models
+        uses: actions/upload-artifact@v4
+        with:
+          name: converted-models
+          path: |
+            egs/librispeech/ASR/pruned_transducer_stateless7_streaming/icefall-libri-giga-pruned-transducer-stateless7-streaming-2023-04-04/exp/*.rknn
