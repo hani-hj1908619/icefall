@@ -411,7 +411,7 @@ def export_decoder_model_onnx(
     """
     context_size = decoder_model.decoder.context_size
     vocab_size = decoder_model.decoder.vocab_size
-    y = torch.zeros(10, context_size, dtype=torch.int64)
+    y = torch.zeros(1, context_size, dtype=torch.int64)
     decoder_model = torch.jit.script(decoder_model)
     torch.onnx.export(
         decoder_model,
