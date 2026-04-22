@@ -74,6 +74,13 @@ def get_parser():
     )
 
     parser.add_argument(
+        "--dynamic-batch",
+        type=int,
+        default=1,
+        help="1 to support dynamic batch size. 0 to support only batch size == 1",
+    )
+
+    parser.add_argument(
         "--epoch",
         type=int,
         default=30,
@@ -245,6 +252,7 @@ def export_encoder_model_onnx(
     encoder_model: OnnxEncoder,
     encoder_filename: str,
     opset_version: int = 11,
+    dynamic_batch: bool = True,
 ) -> None:
     """
     Onnx model inputs:
@@ -367,7 +375,9 @@ def export_encoder_model_onnx(
             "encoder_out": {0: "N"},
             **inputs,
             **outputs,
-        },
+        }
+        if dynamic_batch
+        else {},
     )
 
     add_meta_data(filename=encoder_filename, meta_data=meta_data)
@@ -377,6 +387,7 @@ def export_decoder_model_onnx(
     decoder_model: nn.Module,
     decoder_filename: str,
     opset_version: int = 11,
+    dynamic_batch: bool = True,
 ) -> None:
     """Export the decoder model to ONNX format.
 
@@ -413,7 +424,9 @@ def export_decoder_model_onnx(
         dynamic_axes={
             "y": {0: "N"},
             "decoder_out": {0: "N"},
-        },
+        }
+        if dynamic_batch
+        else {},
     )
     meta_data = {
         "context_size": str(context_size),
@@ -426,6 +439,7 @@ def export_joiner_model_onnx(
     joiner_model: nn.Module,
     joiner_filename: str,
     opset_version: int = 11,
+    dynamic_batch: bool = True,
 ) -> None:
     """Export the joiner model to ONNX format.
     The exported joiner model has two inputs:
@@ -458,7 +472,10 @@ def export_joiner_model_onnx(
             "encoder_out": {0: "N"},
             "decoder_out": {0: "N"},
             "logit": {0: "N"},
-        },
+        }
+        if dynamic_batch
+        else {},
+
     )
     meta_data = {
         "joiner_dim": str(joiner_dim),
@@ -617,6 +634,7 @@ def main():
         encoder,
         encoder_filename,
         opset_version=opset_version,
+        dynamic_batch=params.dynamic_batch == 1,
     )
     logging.info(f"Exported encoder to {encoder_filename}")
 
@@ -626,6 +644,7 @@ def main():
         decoder,
         decoder_filename,
         opset_version=opset_version,
+        dynamic_batch=params.dynamic_batch == 1,
     )
     logging.info(f"Exported decoder to {decoder_filename}")
 
@@ -635,6 +654,7 @@ def main():
         joiner,
         joiner_filename,
         opset_version=opset_version,
+        dynamic_batch=params.dynamic_batch == 1,
     )
     logging.info(f"Exported joiner to {joiner_filename}")
 
